@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="gc9d01_library",
-    version="0.1.1",
+    version="0.1.2",
     author="Marc D",
     author_email="marcdanielt@gmail.com",
     description="A Python driver for the GC9D01 round LCD display on Raspberry Pi",

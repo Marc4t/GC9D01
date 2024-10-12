@@ -1,5 +1,6 @@
 import digitalio
 import time
+from font5x7 import FONT_5X7
 
 class GC9D01Error(Exception):
     """Base exception class for GC9D01 errors."""
@@ -39,6 +40,7 @@ class GC9D01:
             self.rst.direction = digitalio.Direction.OUTPUT
 
             self.init_display()
+            self.set_rotation(0)  # Set initial rotation to normal
         except Exception as e:
             raise GC9D01Error(f"Failed to initialize display: {str(e)}")
 
@@ -118,7 +120,11 @@ class GC9D01:
             self.write_cmd(0xF1, b'\x56', b'\xA8', b'\x7F', b'\x33', b'\x34', b'\x5F')
             self.write_cmd(0xF3, b'\x52', b'\xA4', b'\x7F', b'\x33', b'\x34', b'\xDF')
             
-            self.write_cmd(0x36, b'\x00')
+            self.write_cmd(0x36, b'\xC8')  # Memory Access Control (rotate 180 degrees)
+            self.write_cmd(0x3A, b'\x05')  # Set color mode (16-bit color)
+            self.write_cmd(0xB0, b'\x00')  # Set addressing mode (0x00 for horizontal)
+            self.write_cmd(0xB1, b'\x00', b'\x00')  # Set frame rate (default)
+            self.write_cmd(0xB4, b'\x00')  # Display inversion control (default)
             
             self.write_cmd(0x11)  # Sleep out
             time.sleep(0.200)  # 200ms delay
@@ -177,6 +183,7 @@ class GC9D01:
             GC9D01Error: If writing data fails
         """
         try:
+            print(f"Writing data: {data[:10]}... (total {len(data)} bytes)")
             self.dc.value = 1
             self.cs.value = 0
             self.spi.write(data)
@@ -186,7 +193,7 @@ class GC9D01:
 
     def set_window(self, x0, y0, x1, y1):
         """
-        Set the active window on the display.
+        Set the active window on the display using absolute addressing.
 
         Args:
             x0 (int): Start X coordinate
@@ -198,9 +205,10 @@ class GC9D01:
             GC9D01Error: If setting window fails
             ValueError: If coordinates are out of bounds
         """
-        if not (0 <= x0 < x1 <= self.width and 0 <= y0 < y1 <= self.height):
-            raise ValueError("Invalid window coordinates")
+        if not (0 <= x0 <= x1 < self.width and 0 <= y0 <= y1 < self.height):
+            raise ValueError(f"Invalid window coordinates: ({x0}, {y0}) to ({x1}, {y1})")
         try:
+            print(f"Setting window: ({x0}, {y0}) to ({x1}, {y1})")
             self.write_cmd(0x2A, bytes([x0 >> 8, x0 & 0xFF, x1 >> 8, x1 & 0xFF]))
             self.write_cmd(0x2B, bytes([y0 >> 8, y0 & 0xFF, y1 >> 8, y1 & 0xFF]))
             self.write_cmd(0x2C)
@@ -242,7 +250,7 @@ class GC9D01:
             ValueError: If coordinates are out of bounds or color is invalid
         """
         if not (0 <= x < self.width and 0 <= y < self.height):
-            raise ValueError("Coordinates out of bounds")
+            raise ValueError(f"Coordinates out of bounds: ({x}, {y})")
         if not 0 <= color <= 0xFFFF:
             raise ValueError("Invalid color value")
         try:
@@ -269,3 +277,44 @@ class GC9D01:
             self.write_data(image_data)
         except Exception as e:
             raise GC9D01Error(f"Failed to display image: {str(e)}")
+
+    def set_rotation(self, rotation):
+        """
+        Set the display rotation.
+        
+        Args:
+            rotation (int): 0 for normal, 1 for 90 degrees, 2 for 180 degrees, 3 for 270 degrees
+        """
+        if rotation not in [0, 1, 2, 3]:
+            raise ValueError("Rotation must be 0, 1, 2, or 3")
+
+        rotation_commands = [
+            b'\x00',  # Normal orientation
+            b'\x60',  # Rotate 90 degrees
+            b'\xC0',  # Rotate 180 degrees
+            b'\xA0',  # Rotate 270 degrees
+        ]
+
+        self.write_cmd(0x36, rotation_commands[rotation])
+        time.sleep(0.1)
+
+        # Update width and height if necessary
+        if rotation in [1, 3]:
+            self.width, self.height = self.height, self.width
+
+    def draw_char(self, x, y, char, color, scale=1):
+        """Draw a single character at the specified position."""
+        if char not in FONT_5X7:
+            return
+        
+        for row in range(7):
+            for col in range(5):
+                if FONT_5X7[char][col] & (1 << (6 - row)):
+                    for i in range(scale):
+                        for j in range(scale):
+                            self.draw_pixel(x + col * scale + i, y + row * scale + j, color)
+
+    def draw_text(self, x, y, text, color, scale=1):
+        """Draw text at the specified position."""
+        for i, char in enumerate(text):
+            self.draw_char(x + i * 6 * scale, y, char.upper(), color, scale)
