@@ -1,6 +1,10 @@
 import digitalio
 import time
-from font5x7 import FONT_5X7
+
+try:
+    from font5x7 import FONT_5X7
+except ImportError:
+    FONT_5X7 = {}
 
 class GC9D01Error(Exception):
     """Base exception class for GC9D01 errors."""

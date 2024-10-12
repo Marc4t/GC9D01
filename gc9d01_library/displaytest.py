@@ -5,6 +5,9 @@ import digitalio
 import time
 import math
 
+# Import the font directly in your script
+from gc9d01_library.font5x7 import FONT_5X7
+
 # Setup SPI communication
 spi = busio.SPI(clock=board.SCK, MOSI=board.MOSI)
 spi.try_lock()
@@ -107,6 +110,8 @@ def draw_hand(buffer, angle, length, color):
     draw_line_buffer(buffer, center_x, center_y, end_x, end_y, color)
 
 def update_clock(display):
+    global last_minute
+    
     # Create a copy of the clock face buffer
     update_buffer = bytearray(clock_face_buffer)
     
@@ -133,12 +138,42 @@ def update_clock(display):
     display.set_window(0, 0, 159, 159)
     display.write_data(update_buffer)
 
-    # Draw text
-    time_str = f"{hours:02d}:{minutes:02d}"
-    display.draw_text(60, 100, time_str, 0xFFFF, scale=2)  # White text, scaled up
+    # Update text only when minute changes
+    if minutes != last_minute:
+        last_minute = minutes
+        hours = hours if hours != 0 else 12  # Convert 0 to 12 for display
+        time_str = f"{hours:2d}:{minutes:02d}"
+        text_width = len(time_str) * 6 * 2  # 6 pixels per character, scale of 2
+        text_x = (display.width - text_width) // 2
+        
+        # Clear previous text area
+        for y in range(100, 114):  # Adjust these values based on your text size and position
+            for x in range(text_x, text_x + text_width):
+                display.draw_pixel(x, y, 0x0000)  # Black color to clear
+        
+        # Draw new text
+        draw_text(display, text_x, 100, time_str, 0xFFFF, scale=2)  # White text, scaled up, centered
+
+# Add these methods to your script
+def draw_char(display, x, y, char, color, scale=1):
+    if char not in FONT_5X7:
+        return
+    for row in range(7):
+        for col in range(5):
+            if FONT_5X7[char][col] & (1 << row):  # Changed back to original column order and flipped row
+                for i in range(scale):
+                    for j in range(scale):
+                        display.draw_pixel(x + col * scale + i, y + row * scale + j, color)
+
+def draw_text(display, x, y, text, color, scale=1):
+    for i, char in enumerate (reversed(text)):  # Changed from enumerate(text)
+        draw_char(display, x + (len(text) - 1 - i) * 6 * scale, y, char.upper(), color, scale)
 
 # Initialize the clock face
 create_clock_face()
+
+# Add this after your imports
+last_minute = -1  # Initialize to an impossible value
 
 # Main loop
 while True:
