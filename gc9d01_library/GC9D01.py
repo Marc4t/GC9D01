@@ -1,5 +1,8 @@
 import digitalio
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 try:
     from font5x7 import FONT_5X7
@@ -56,7 +59,7 @@ class GC9D01:
             GC9D01Error: If initialization fails
         """
         try:
-            print("Initializing display...")
+            logger.debug("Initializing display...")
             self.reset()
             
             # Send initialization commands to the display
@@ -136,7 +139,7 @@ class GC9D01:
             self.write_cmd(0x29)  # Display on
             self.write_cmd(0x2C)  # Memory write
             
-            print("Display initialization complete.")
+            logger.debug("Display initialization complete.")
         except Exception as e:
             raise GC9D01Error(f"Display initialization failed: {str(e)}")
 
@@ -187,7 +190,7 @@ class GC9D01:
             GC9D01Error: If writing data fails
         """
         try:
-            print(f"Writing data: {data[:10]}... (total {len(data)} bytes)")
+            logger.debug(f"Writing data: {data[:10]}... (total {len(data)} bytes)")
             self.dc.value = 1
             self.cs.value = 0
             self.spi.write(data)
@@ -212,7 +215,7 @@ class GC9D01:
         if not (0 <= x0 <= x1 < self.width and 0 <= y0 <= y1 < self.height):
             raise ValueError(f"Invalid window coordinates: ({x0}, {y0}) to ({x1}, {y1})")
         try:
-            print(f"Setting window: ({x0}, {y0}) to ({x1}, {y1})")
+            logger.debug(f"Setting window: ({x0}, {y0}) to ({x1}, {y1})")
             self.write_cmd(0x2A, bytes([x0 >> 8, x0 & 0xFF, x1 >> 8, x1 & 0xFF]))
             self.write_cmd(0x2B, bytes([y0 >> 8, y0 & 0xFF, y1 >> 8, y1 & 0xFF]))
             self.write_cmd(0x2C)
@@ -322,3 +325,14 @@ class GC9D01:
         """Draw text at the specified position."""
         for i, char in enumerate(text):
             self.draw_char(x + i * 6 * scale, y, char.upper(), color, scale)
+
+    def set_brightness(self, brightness):
+        """
+        Set display brightness level (0-255)
+        :param brightness: Brightness level (0-255)
+        """
+        brightness = max(0, min(255, int(brightness)))  # Clamp between 0-255
+        self.write_cmd(0x53)  # WRCTRLD
+        self.write_cmd(0x24)     # Enable brightness control
+        self.write_cmd(0x51)  # WRDISBV (Write Display Brightness)
+        self.write_data(brightness.to_bytes(1, 'big'))
